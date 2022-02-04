@@ -21,60 +21,59 @@ struct ctx_t *ctx;
 
 static PyObject *anergistic_execute(PyObject *self, PyObject *args)
 {
-	unsigned char *local_store, *registers;
-	Py_ssize_t local_store_size, registers_size;
+	Py_buffer local_store, registers;
 	int pc;
 	PyObject *breakpoints = NULL;
 	PyObject *breakpoints_insns = NULL;
-	
+
 	(void)self;
-	if (!PyArg_ParseTuple(args, "w#w#I|OO", 
-		&local_store, &local_store_size, 
-		&registers, &registers_size,
-		&pc,
-		&breakpoints,
-		&breakpoints_insns))
+	if (!PyArg_ParseTuple(args, "y*y*i|OO",
+						  &local_store,
+						  &registers,
+						  &pc,
+						  &breakpoints,
+						  &breakpoints_insns))
 		return NULL;
-	
-	// XXX: why is (int) required?	
-	if ((int)local_store_size != 256 * 1024)
+
+	// XXX: why is (int) required?
+	if ((int)local_store.len != 256 * 1024)
 	{
 		PyErr_SetString(PyExc_TypeError, "The local storage must be a 256kb string array");
-		return NULL;
+		goto ERROR;
 	}
-	
-	// XXX: why is (int) required?	
-	if ((int)registers_size != 128 * 16)
+
+	// XXX: why is (int) required?
+	if ((int)registers.len != 128 * 16)
 	{
 		PyErr_SetString(PyExc_TypeError, "The registers must be a 128*16 string array");
-		return NULL;
+		goto ERROR;
 	}
-	
+
 	if (pc < 0 || (pc >= 256 * 1024) || (pc & 3))
 	{
 		PyErr_SetString(PyExc_TypeError, "PC must be aligned pointer within ls");
-		return NULL;
+		goto ERROR;
 	}
-	
+
 	memset(&_ctx, 0, sizeof _ctx);
 	ctx = &_ctx;
-	ctx->ls = (unsigned char*)local_store;
+	ctx->ls = local_store.buf;
 	ctx->pc = pc;
-	
+
 	int i;
 	for (i = 0; i < 128; ++i)
-		byte_to_reg(i, registers + i * 16);
+		byte_to_reg(i, (u8 *)registers.buf + i * 16);
 
 	ctx->paused = 0;
 	ctx->trap = 1;
-	
+
 	ctx->pc &= LSLR;
-	
-	while(emulate() == 0)
+
+	while (emulate() == 0)
 	{
 		if (breakpoints)
 		{
-			PyObject *pc = PyInt_FromLong(ctx->pc);
+			PyObject *pc = PyLong_FromLong(ctx->pc);
 			if (PySet_Contains(breakpoints, pc))
 			{
 				Py_DECREF(pc);
@@ -84,7 +83,7 @@ static PyObject *anergistic_execute(PyObject *self, PyObject *args)
 		}
 		if (breakpoints_insns)
 		{
-			PyObject *pc = PyInt_FromLong(be32(ctx->ls + ctx->pc) >> 21);
+			PyObject *pc = PyLong_FromLong(be32(ctx->ls + ctx->pc) >> 21);
 			if (PySet_Contains(breakpoints_insns, pc))
 			{
 				Py_DECREF(pc);
@@ -92,16 +91,24 @@ static PyObject *anergistic_execute(PyObject *self, PyObject *args)
 			}
 			Py_DECREF(pc);
 		}
-		if (PyErr_CheckSignals())
-			return NULL;
-		if (PyErr_Occurred())
-			return NULL;
+		if (PyErr_CheckSignals() || PyErr_Occurred())
+		{
+			goto ERROR;
+		}
 	}
 
 	for (i = 0; i < 128; ++i)
-		reg_to_byte(registers + i * 16, i);
+		reg_to_byte((u8 *)registers.buf + i * 16, i);
 
-	return PyInt_FromLong(ctx->pc);
+	PyBuffer_Release(&local_store);
+	PyBuffer_Release(&registers);
+
+	return PyLong_FromLong(ctx->pc);
+
+ERROR:
+	PyBuffer_Release(&local_store);
+	PyBuffer_Release(&registers);
+	return NULL;
 }
 
 void fail(const char *a, ...)
@@ -114,13 +121,24 @@ void fail(const char *a, ...)
 	PyErr_SetString(PyExc_RuntimeError, msg);
 }
 
-static PyMethodDef AnergisticMethods[] = {
-	{"execute", anergistic_execute, METH_VARARGS, "execute"},
-	{NULL, NULL, 0, NULL}
-};
+static PyMethodDef anergistic_methods[] =
+	{
+		{"execute", anergistic_execute, METH_VARARGS, "execute"},
+		{NULL, NULL, 0, NULL}};
 
-PyMODINIT_FUNC
-initanergistic(void)
+static struct PyModuleDef moduledef =
+	{
+		PyModuleDef_HEAD_INIT,
+		"anergistic",
+		NULL,
+		-1,
+		anergistic_methods,
+		NULL,
+		NULL,
+		NULL,
+		NULL};
+
+PyObject *PyInit_anergistic(void)
 {
-	(void) Py_InitModule("anergistic", AnergisticMethods);
+	return PyModule_Create(&moduledef);
 }

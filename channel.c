@@ -14,39 +14,39 @@
 #include "channel.h"
 
 //Channel names.
-static char *ch_names[] = 
-{
-  "SPU_RdEventStat",        //0
-  "SPU_WrEventMask",        //1
-  "SPU_WrEventAck",         //2
-  "SPU_RdSigNotify1",       //3
-  "SPU_RdSigNotify2",       //4
-  "UNKNOWN",                //5
-  "UNKNOWN",                //6
-  "SPU_WrDec",              //7
-  "SPU_RdDec",              //8
-  "MFC_WrMSSyncReq",        //9
-  "UNKNOWN",               //10
-  "SPU_RdEventMask",       //11
-  "MFC_RdTagMask",         //12
-  "SPU_RdMachStat",        //13
-  "SPU_WrSRR0",            //14
-  "SPU_RdSRR0",            //15
-  "MFC_LSA",               //16
-  "MFC_EAH",               //17
-  "MFC_EAL",               //18
-  "MFC_Size",              //19
-  "MFC_TagID",             //20
-  "MFC_Cmd",               //21
-  "MFC_WrTagMask",         //22
-  "MFC_WrTagUpdate",       //23
-  "MFC_RdTagStat",         //24
-  "MFC_RdListStallStat",   //25
-  "MFC_WrListStallAck",    //26
-  "MFC_RdAtomicStat",      //27
-  "SPU_WrOutMbox",         //28
-  "SPU_RdInMbox",          //29
-  "SPU_WrOutIntrMbox"      //30
+static char *ch_names[] =
+	{
+		"SPU_RdEventStat",	   //0
+		"SPU_WrEventMask",	   //1
+		"SPU_WrEventAck",	   //2
+		"SPU_RdSigNotify1",	   //3
+		"SPU_RdSigNotify2",	   //4
+		"UNKNOWN",			   //5
+		"UNKNOWN",			   //6
+		"SPU_WrDec",		   //7
+		"SPU_RdDec",		   //8
+		"MFC_WrMSSyncReq",	   //9
+		"UNKNOWN",			   //10
+		"SPU_RdEventMask",	   //11
+		"MFC_RdTagMask",	   //12
+		"SPU_RdMachStat",	   //13
+		"SPU_WrSRR0",		   //14
+		"SPU_RdSRR0",		   //15
+		"MFC_LSA",			   //16
+		"MFC_EAH",			   //17
+		"MFC_EAL",			   //18
+		"MFC_Size",			   //19
+		"MFC_TagID",		   //20
+		"MFC_Cmd",			   //21
+		"MFC_WrTagMask",	   //22
+		"MFC_WrTagUpdate",	   //23
+		"MFC_RdTagStat",	   //24
+		"MFC_RdListStallStat", //25
+		"MFC_WrListStallAck",  //26
+		"MFC_RdAtomicStat",	   //27
+		"SPU_WrOutMbox",	   //28
+		"SPU_RdInMbox",		   //29
+		"SPU_WrOutIntrMbox"	   //30
 };
 
 //MFC channel values.
@@ -61,57 +61,48 @@ static u32 _MFC_TagStat;
 #define MFC_GET_CMD 0x40
 #define MFC_SNDSIG_CMD 0xA0
 
-//Endian swap.
-#define _BE(val) ((((val) & 0xff00000000000000ull) >> 56) | \
-                  (((val) & 0x00ff000000000000ull) >> 40) | \
-                  (((val) & 0x0000ff0000000000ull) >> 24) | \
-                  (((val) & 0x000000ff00000000ull) >> 8 ) | \
-                  (((val) & 0x00000000ff000000ull) << 8 ) | \
-                  (((val) & 0x0000000000ff0000ull) << 24) | \
-                  (((val) & 0x000000000000ff00ull) << 40) | \
-                  (((val) & 0x00000000000000ffull) << 56))
-
 void handle_mfc_command(u32 cmd)
 {
 	printf("Local address %08x, EA = %08x:%08x, Size=%08x, TagID=%08x, Cmd=%08x\n",
-		MFC_LSA, MFC_EAH, MFC_EAL, MFC_Size, MFC_TagID, cmd);
+		   MFC_LSA, MFC_EAH, MFC_EAL, MFC_Size, MFC_TagID, cmd);
 #ifdef DEBUG_CHANNEL
 	getchar();
 #endif
-		
+
 	switch (cmd)
 	{
 	case MFC_PUT_CMD:
 		printf("MFC_PUT (DMA out of LS)\n");
-    {
-			FILE *fp = fopen("out.bin", "a+");
-			fwrite(ctx->ls + _MFC_LSA, sizeof(u8), _MFC_Size, fp);
+		{
+			FILE *fp = fopen("dma_out.bin", "r+b");
+			if (!fp)
+			{
+				fp = fopen("dma_out.bin", "wb");
+				if (!fp)
+					exit(1);
+			}
+			fseek(fp, (u64)_MFC_EAH << 32 | _MFC_EAL, SEEK_SET);
+			if (fwrite(ctx->ls + _MFC_LSA, sizeof(u8), _MFC_Size, fp) != _MFC_Size)
+			{
+				printf("MFC_PUT_CMD: write error\n");
+				exit(1);
+			}
 			fclose(fp);
 		}
 		break;
 	case MFC_GET_CMD:
 		printf("MFC_GET (DMA into LS)\n");
 		{
-			static int round = 0;
-			                         //module debug output address, set both to 0x0 for none
-			static u64 data0[2] = {_BE(0xbeef0110dead0000), _BE(0xbeef0220dead0000)};
-			static u64 data1[4] = {_BE(0xbeef0110dead0000), _BE(0xbeef0220dead0000), 
-			                       _BE(0x0000000200000000), _BE(0x0000000000000000)};
-			                                  //^-- 1,2,3,4 (device type/id, pscode, psid)
-			if(round == 0)
-				memcpy(ctx->ls + _MFC_LSA, &data0, _MFC_Size);
-			else if(round == 1)
-				memcpy(ctx->ls + _MFC_LSA, &data1, _MFC_Size);
-			else if(round == 2)
+			FILE *fp = fopen("dma_in.bin", "rb");
+			if (!fp)
+				exit(1);
+			fseek(fp, (u64)_MFC_EAH << 32 | _MFC_EAL, SEEK_SET);
+			if (fread(ctx->ls + _MFC_LSA, sizeof(u8), _MFC_Size, fp) != _MFC_Size)
 			{
-				//Load EID segment.
-				printf("loading EID...");
-				FILE *fp = fopen("eid_tmp", "rb");
-				fread(ctx->ls + _MFC_LSA, sizeof(u8), _MFC_Size, fp);
-				fclose(fp);
-				printf("done\n");
+				printf("MFC_GET_CMD: read error\n");
+				exit(1);
 			}
-			round++;
+			fclose(fp);
 		}
 		break;
 	default:
@@ -137,23 +128,23 @@ void handle_mfc_tag_update(u32 tag)
 		printf("-> UNKNOWN\n");
 		break;
 	}
-	
+
 	_MFC_TagStat = _MFC_TagMask;
 }
 
 void channel_wrch(int ch, int reg)
 {
 	u32 r = ctx->reg[reg][0];
-	
+
 	printf("CHANNEL: wrch ch%d(= %s) r%d(= 0x%08x)\n", ch, (ch <= 30 ? ch_names[ch] : "UNKNOWN"), reg, r);
 #ifdef DEBUG_CHANNEL
 	getchar();
 #endif
-	
+
 	switch (ch)
 	{
 	case SPU_WrDec: //write decrementer
-		break;		
+		break;
 	case MFC_LSA:
 		printf("MFC_LSA %08x\n", r);
 		_MFC_LSA = r;
@@ -200,12 +191,12 @@ void channel_wrch(int ch, int reg)
 void channel_rdch(int ch, int reg)
 {
 	u32 r = 0;
-	
+
 	printf("CHANNEL: rdch ch%d(= %s) r%d\n", ch, (ch <= 30 ? ch_names[ch] : "UNKNOWN"), reg);
 #ifdef DEBUG_CHANNEL
 	getchar();
 #endif
-	
+
 	switch (ch)
 	{
 	case SPU_RdDec: //read decrementer
@@ -218,7 +209,7 @@ void channel_rdch(int ch, int reg)
 		printf("MFC_RdAtomicStat %08x\n", r);
 		break;
 	}
-	
+
 	//Set register
 	ctx->reg[reg][0] = r;
 	ctx->reg[reg][1] = 0;
@@ -229,12 +220,12 @@ void channel_rdch(int ch, int reg)
 int channel_rchcnt(int ch)
 {
 	u32 r = 0;
-	
+
 	printf("CHANNEL: rchcnt ch%d(%s)\n", ch, (ch <= 30 ? ch_names[ch] : "UNKNOWN"));
 #ifdef DEBUG_CHANNEL
 	getchar();
 #endif
-	
+
 	switch (ch)
 	{
 	case MFC_WrTagUpdate:

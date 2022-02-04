@@ -53,7 +53,7 @@ class MFC:
 			return self.mbox.pop(0)
 		else:
 			raise self.UnknownChannel("pc=%08x channel=%d" % (self.pc, ch))
-	
+
 	def rchcnt(self, ch):
 		if ch == 23:
 			return 1
@@ -84,16 +84,16 @@ class MFC:
 	MFC_GET_CMD = 0x40
 	MFC_SNDSIG_CMD = 0xA0
 	MFC_PUT_CMD = 0x20
-	
+
 	class UnknownCommand(Exception):
 		pass
 
 	def handle_command(self, command):
 		if command == self.MFC_GET_CMD:
-#			print "DMA GET Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID)
+#			print("DMA GET Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID))
 			self.set_ls(self.MFC_LSA, self.dma_get((self.MFC_EAH << 32) | self.MFC_EAL, self.MFC_Size))
 		elif command == self.MFC_PUT_CMD:
-#			print "DMA PUT Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID)
+#			print("DMA PUT Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID))
 			self.dma_set((self.MFC_EAH << 32) | self.MFC_EAL, self.ls[self.MFC_LSA:self.MFC_LSA + self.MFC_Size])
 		else:
 			raise self.UnknownCommand("pc=%08x command=%02x" % (self.pc, command))
@@ -107,7 +107,7 @@ class MFC:
 class Calltree:
 	"basic calltree. call calltree_init after loading symbols(!), then call calltree_dump at the end."
 	INSN_BI = (0x35000000 >> 21,)
-	INSN_BRSL_BISL = range(0x33000000 >> 21, 0x33800000 >> 21) + [0x35200000 >> 21]
+	INSN_BRSL_BISL = list(range(0x33000000 >> 21, 0x33800000 >> 21)) + [0x35200000 >> 21]
 	def calltree_init(self, instant = False):
 		# break on bi
 		self.breakpoints_insns.update(self.INSN_BI)
@@ -133,14 +133,13 @@ class Calltree:
 		if self.instant_calltree:
 			self.calltree_dump()
 
-	def calltree_dump(self):		
+	def calltree_dump(self):
 		for (pc, level, target, res) in self.tree:
-			print "%08x" % pc, 
-			print level * " |",
+			print("%08x" % pc, level * " |", end=' ')
 			if target is None:
-				print " \\= 0x%08x" % res[0]
+				print(" \\= 0x%08x" % res[0])
 			else:
-				print "-> %s(%s)" % (self.symbols.get(target), ','.join(["0x%08x" % r for r in res]))
+				print("-> %s(%s)" % (self.symbols.get(target).decode(), ','.join(["0x%08x" % r for r in res])))
 		self.tree = []
 
 class SPU(MFC, Calltree):
@@ -148,8 +147,8 @@ class SPU(MFC, Calltree):
 		pass
 
 	def __init__(self):
-		self.ls = array.array("c", "\0" * 256 * 1024)
-		self.registers = array.array("c", "\0" * 128 * 16)
+		self.ls = array.array("B", b"\0" * 256 * 1024)
+		self.registers = array.array("B", b"\0" * 128 * 16)
 		self.breakpoints = set()
 		self.breakpoints_insns = set()
 		self.prerun = []
@@ -158,31 +157,31 @@ class SPU(MFC, Calltree):
 
 	def demangle_symbols(self):
 		try:
-			symbols = ""
+			symbols = b""
 			for d in self.symbols:
-				symbols = symbols + "\n" + self.symbols[d]
+				symbols = symbols + b"\n" + self.symbols[d]
 			p = subprocess.Popen(['c++filt', '-n'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-			out = p.communicate(symbols)[0].split("\n")
+			out = p.communicate(symbols)[0].split(b"\n")
 			i = 1
 			for d in self.symbols:
 				self.symbols[d] = out[i]
 				i = i + 1
 		except OSError:
-			print "Unable to demangle ELF symbols."
+			print("Unable to demangle ELF symbols.")
 
 	def run(self):
 		while True:
 			opcode = struct.unpack(">I", self.ls[self.pc:self.pc+4])[0]
 			rt = opcode & 0x7F
 			ch = (opcode >> 7) & 0x7F
-			
+
 			for f in self.prerun:
 				f(opcode)
-			
+
 			if self.pc in self.hooks:
 				if self.hooks[self.pc]():
 					continue
-			
+
 			if   opcode & 0xFFE00000 == 0x21a00000:
 				self.wrch(ch, self.get_regW(rt))
 				self.pc += 4
@@ -207,27 +206,27 @@ class SPU(MFC, Calltree):
 
 	def load(self, filename, no_calltree = True):
 		"""Load an elf into the local store (and set PC to entry point)"""
-		
+
 		SHT_SYMTAB = 2
 		SHT_STRTAB = 3
-		
+
 		elf = open(filename, "rb")
 		(e_ident, e_type, e_machine, e_version, e_entry, e_phoff, e_shoff, e_flags, e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx) = \
 			struct.unpack(">16sHHIIIIIHHHHHH", elf.read(0x34))
-		assert e_ident[:4] == "\x7FELF"
-		
+		assert e_ident[:4] == b"\x7FELF"
+
 		for i in range(e_phnum):
 			elf.seek(e_phoff + e_phentsize * i)
 			p_type, p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_flags, p_align = \
 				struct.unpack(">IIIIIIII", elf.read(0x20))
-			
+
 			elf.seek(p_offset)
 			self.set_ls(p_paddr, elf.read(p_filesz))
-						
-			print "elf: phdr #%u: %08x bytes; %08x -> %08x" % (i, p_filesz, p_offset, p_paddr)
-			
+
+			print("elf: phdr #%u: %08x bytes; %08x -> %08x" % (i, p_filesz, p_offset, p_paddr))
+
 		symbols = {}
-		
+
 		strtab = None
 
 		# fake two-pass algorithm to first find the symbtab, then load the strings
@@ -235,48 +234,48 @@ class SPU(MFC, Calltree):
 			elf.seek(e_shoff + e_shentsize * i)
 			sh_name, sh_type, sh_flags, sh_addr, sh_offset, sh_size, sh_link, sh_info, sh_addralign, sh_entsize = \
 			struct.unpack(">IIIIIIIIII", elf.read(0x28))
-			
+
 			if sh_type == SHT_SYMTAB:
 				elf.seek(sh_offset)
-				
-				for i in range(sh_size / sh_entsize):
+
+				for i in range(sh_size // sh_entsize):
 					st_name, st_value, st_size, st_info, st_other, st_shndx = \
 						struct.unpack(">IIIBBH", elf.read(sh_entsize))
 					symbols[st_value] = st_name
 				strtab = sh_link
 			elif i == strtab: # yes, they need to be in order.
-				print "symbol string tab at %08x size %08x" % (sh_offset, sh_size)
+				print("symbol string tab at %08x size %08x" % (sh_offset, sh_size))
 				for st_value in symbols:
 					st_name = symbols[st_value]
 					assert st_name < sh_size
 					elf.seek(sh_offset + st_name)
-					str = ""
+					str = b""
 					while True:
-	 					str += elf.read(16)
-	 					zero = str.find("\0")
-	 					if zero != -1:
-	 						str = str[:zero]
-	 						break
+						str += elf.read(16)
+						zero = str.find(b"\0")
+						if zero != -1:
+							str = str[:zero]
+							break
 					symbols[st_value] = str
-		
+
 		self.symbols = symbols
 		self.symbols_mangled = {}
 		for s in self.symbols:
 			self.symbols_mangled[self.symbols[s]] = s
 		self.demangle_symbols()
 		self.pc = e_entry
-		
+
 #		self.calltree_init(True)
 		if self.symbols and not no_calltree:
 			self.calltree_init(True)
-	
+
 	def set_regW(self, reg, value):
 		"""Set preferred word of register."""
 		self.set_regW4(reg, (value, 0, 0, 0))
 
 	def set_regW4(self, reg, value):
 		"""Set register as 4 words."""
-		self.registers[reg * 16:(reg + 1) * 16] = array.array("c", struct.pack(">IIII", *value))
+		self.registers[reg * 16:(reg + 1) * 16] = array.array("B", struct.pack(">IIII", *value))
 
 	def set_regD(self, reg, value):
 		"""Set preferred doubleword of register"""
@@ -284,14 +283,14 @@ class SPU(MFC, Calltree):
 
 	def get_regW4(self, reg):
 		return struct.unpack(">IIII", self.registers[reg * 16:(reg + 1) * 16])
-	
+
 	def get_regW(self, reg):
 		return self.get_regW4(reg)[0]
 
 	def set_ls(self, offset, data):
 		"""Store data in LS at offset"""
 		assert offset + len(data) <= len(self.ls)
-		self.ls[offset:offset+len(data)] = array.array("c", data)
+		self.ls[offset:offset+len(data)] = array.array("B", data)
 
 	def get_ls(self, offset, len):
 		return self.ls[offset:offset + len]

@@ -73,43 +73,44 @@ static void decode_ri18(void)
 static int emulate_instr(void)
 {
 	op = instr_bits(0, 10);
-	
-	switch(instr_tbl[op].type) {
-		case SPU_INSTR_RR:
-			decode_rr();
-			return ((spu_instr_rr_t)instr_tbl[op].ptr)(rt, ra, rb);
-			break;
-		case SPU_INSTR_RRR:
-			decode_rrr();
-			return ((spu_instr_rrr_t)instr_tbl[op].ptr)(rt, ra, rb, rc);
-			break;
-		case SPU_INSTR_RI7:
-			decode_ri7();
-			return ((spu_instr_ri7_t)instr_tbl[op].ptr)(rt, ra, ix);
-			break;
-		case SPU_INSTR_RI8:
-			decode_ri8();
-			return ((spu_instr_ri8_t)instr_tbl[op].ptr)(rt, ra, ix);
-			break;
-		case SPU_INSTR_RI10:
-			decode_ri10();
-			return ((spu_instr_ri10_t)instr_tbl[op].ptr)(rt, ra, ix);
-			break;
-		case SPU_INSTR_RI16:
-			decode_ri16();
-			return ((spu_instr_ri16_t)instr_tbl[op].ptr)(rt, ix);
-			break;
-		case SPU_INSTR_RI18:
-			decode_ri18();
-			return ((spu_instr_ri18_t)instr_tbl[op].ptr)(rt, ix);
-			break;
-		case SPU_INSTR_SPECIAL:
-			return ((spu_instr_special_t)instr_tbl[op].ptr)(instr);
-			break;
-		case SPU_INSTR_NONE:
-		default:
-			fail("Unknown instruction at %08x: %08x", ctx->pc, instr);
-			return 1;
+
+	switch (instr_tbl[op].type)
+	{
+	case SPU_INSTR_RR:
+		decode_rr();
+		return ((spu_instr_rr_t)instr_tbl[op].ptr)(rt, ra, rb);
+		break;
+	case SPU_INSTR_RRR:
+		decode_rrr();
+		return ((spu_instr_rrr_t)instr_tbl[op].ptr)(rt, ra, rb, rc);
+		break;
+	case SPU_INSTR_RI7:
+		decode_ri7();
+		return ((spu_instr_ri7_t)instr_tbl[op].ptr)(rt, ra, ix);
+		break;
+	case SPU_INSTR_RI8:
+		decode_ri8();
+		return ((spu_instr_ri8_t)instr_tbl[op].ptr)(rt, ra, ix);
+		break;
+	case SPU_INSTR_RI10:
+		decode_ri10();
+		return ((spu_instr_ri10_t)instr_tbl[op].ptr)(rt, ra, ix);
+		break;
+	case SPU_INSTR_RI16:
+		decode_ri16();
+		return ((spu_instr_ri16_t)instr_tbl[op].ptr)(rt, ix);
+		break;
+	case SPU_INSTR_RI18:
+		decode_ri18();
+		return ((spu_instr_ri18_t)instr_tbl[op].ptr)(rt, ix);
+		break;
+	case SPU_INSTR_SPECIAL:
+		return ((spu_instr_special_t)instr_tbl[op].ptr)(instr);
+		break;
+	case SPU_INSTR_NONE:
+	default:
+		fail("Unknown instruction at %08x: %08x", ctx->pc, instr);
+		return 1;
 	}
 }
 
@@ -117,14 +118,14 @@ u32 emulate(void)
 {
 	int res;
 
-	u32 opc = ctx->pc;
-
 	instr = be32(ctx->ls + ctx->pc);
 #ifdef DEBUG_INSTR
+	const u32 opc = ctx->pc;
 	dbgprintf("%05x: %08x ", ctx->pc, instr);
 #endif
 
-	if (gdb_bp_x(ctx->pc)) {
+	if (gdb_bp_x(ctx->pc))
+	{
 #ifdef DEBUG_GDB
 		printf("------------------------------------------ break %08x\n", ctx->pc);
 #endif
@@ -144,34 +145,30 @@ u32 emulate(void)
 #ifdef DEBUG_TRACE
 	dbgprintf("%05x: ", ctx->pc);
 	dbgprintf("rt:\t%08x %08x %08x %08x ",
-			rtw[0],
-			rtw[1],
-			rtw[2],
-			rtw[3]
-			);
+			  rtw[0],
+			  rtw[1],
+			  rtw[2],
+			  rtw[3]);
 	dbgprintf("ra:\t%08x %08x %08x %08x ",
-			raw[0],
-			raw[1],
-			raw[2],
-			raw[3]
-			);
+			  raw[0],
+			  raw[1],
+			  raw[2],
+			  raw[3]);
 	if ((instr_tbl[op].type == SPU_INSTR_RR) || (instr_tbl[op].type == SPU_INSTR_RRR))
 	{
 		dbgprintf("rb:\t%08x %08x %08x %08x ",
-				rbw[0],
-				rbw[1],
-				rbw[2],
-				rbw[3]
-				);
+				  rbw[0],
+				  rbw[1],
+				  rbw[2],
+				  rbw[3]);
 	}
 	if (instr_tbl[op].type == SPU_INSTR_RRR)
 	{
 		dbgprintf("rc:\t%08x %08x %08x %08x",
-				rcw[0],
-				rcw[1],
-				rcw[2],
-				rcw[3]
-				);
+				  rcw[0],
+				  rcw[1],
+				  rcw[2],
+				  rcw[3]);
 	}
 	printf("\n");
 #endif
@@ -187,6 +184,6 @@ u32 emulate(void)
 	if ((ctx->pc & 3) != 0)
 		fail("pc is not aligned: %08x", ctx->pc);
 
-//	dbgprintf("\n\n", count);
+	//	dbgprintf("\n\n", count);
 	return 0;
 }

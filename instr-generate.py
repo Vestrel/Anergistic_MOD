@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2010 fail0verflow <master@fail0verflow.com>
 # Licensed under the terms of the GNU GPL, version 2
 # http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
@@ -39,45 +39,45 @@ for line in tbl:
 		function_bodies[current_instruction] = function_body
 		function_body = current_instruction = None
 		continue
-	
+
 	if line[0] == '{':
 		assert function_body is None, "missing }"
 		function_body = ""
 		continue
-	
+
 	if function_body is not None:
 		function_body += line
 		continue
 
 	assert function_body is None, "missing }"
-	
+
 	line = line.lstrip().rstrip()
-	
+
 	if not line:
 		continue
 
 	if line[0] == '#':
 		continue
-	
+
 	line = line.split(',')
-	
+
 	(l, type, args) = types[line[1]]
 	opcode = int(line[0], base=2)
 	opcode = opcode << (OPCODE_MAX - l)
-#	print hex(opcode)
+#	print(hex(opcode))
 #	sys.exit(1)
 
 	current_instruction = line[2]
-	
+
 	function_args[current_instruction] = args
-	function_attributes[current_instruction] = line[3:]	
+	function_attributes[current_instruction] = line[3:]
 	function_bodies[current_instruction] = None
 
 	for i in range(0, (1 << (OPCODE_MAX - l))):
 		if optbl[opcode + i] != ["NULL", "SPU_INSTR_NONE"]:
 			a = optbl[opcode + i]
 			b = [decorate(current_instruction), type]
-			print ("uh oh, would overwrite %s with %s" % (a, b))
+			print("uh oh, would overwrite %s with %s" % (a, b))
 			fail = True
 		optbl = optbl[:opcode + i] + [[decorate(current_instruction), type]] + optbl[opcode + i + 1:]
 
@@ -88,7 +88,7 @@ for op in optbl:
 	i = i + 1
 
 if fail == True:
-	print instrs
+	print(instrs)
 	sys.exit(1)
 
 code = ""
@@ -106,14 +106,14 @@ for fnc in function_bodies:
 	argnames = [x[-1] for x in args]
 	dump_instruction = 'vdbgprintf("%s %s\\n", %s);' % (fnc, ','.join([print_arg(x, "signed" in function_attributes[fnc]) for x in argnames]), ','.join(argnames))
 	ignore_unused = ''.join("(void)%s;" % x[-1] for x in args)
-	
+
 	pre_transform = ""
 	post_transform = ""
 
 	ret = 0
-	
+
 	trap = ""
-	
+
 	for attrib in function_attributes[fnc]:
 		if attrib == "signed":
 			for at, an in args:
@@ -137,16 +137,16 @@ for fnc in function_bodies:
 			trap = "if (ctx->trap) return 1;"
 		else:
 			assert None, "Unknown attrib %s" % attrib
-	
-	
+
+
 	if function_bodies[fnc] is None:
 		ret = 1
-	
+
 	code += """int %s(%s)
 {
 	int stop = %d;
 	/* ignore unused arguments */
-	%s 
+	%s
 	/* pre transform */
 	%s
 	/* show disassembly*/
@@ -175,4 +175,3 @@ for file in sys.argv[2:]:
 	out.write(tpl)
 	out.close()
 	tbl.close()
-

@@ -24,7 +24,8 @@ static void elf_load_phdr(u32 i)
 	fseek(fp, phdr_offset + 0x20 * i, SEEK_SET);
 	fread(phdr, sizeof phdr, 1, fp);
 
-	if (be32(phdr) != 1) {
+	if (be32(phdr) != 1)
+	{
 		dbgprintf("phdr #%u: no LOAD\n", i);
 		return;
 	}

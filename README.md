@@ -1,4 +1,4 @@
-Anergistic_MOD
+Anergistic
 ==============
 
-Modified Anergistic to accept external Per_Console_Keys and different EID segments
+Anergistic tool ported to python3

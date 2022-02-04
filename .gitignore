@@ -10,3 +10,11 @@
 *.lai
 *.la
 *.a
+
+# Other generated files
+emulate-instrs.c
+emulate-instrs.h
+anergistic
+
+experiments/*
+settings.json
