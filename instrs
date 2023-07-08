@@ -86,7 +86,7 @@
 00111110100,ri7,cbd,signed,byte
 {
 	int t = (raw[0] + i7) & 0xF;
-	
+
 	int i;
 	for (i = 0; i < 16; ++i)
 		rtb[i] = ((i == t) ? 0x03 : (i|0x10));
@@ -95,7 +95,7 @@
 00111010100,rr,cbx,byte
 {
 	int t = (raw[0] + rbw[0]) & 0xF;
-	
+
 	int i;
 	for (i = 0; i < 16; ++i)
 		rtb[i] = ((i == t) ? 0x03 : (i|0x10));
@@ -107,7 +107,7 @@
 
 	t >>= 1;
 	t &= 7;
-	
+
 	int i;
 	for (i = 0; i < 8; ++i)
 		rth[i] = ((i == t) ? 0x0203 : (i * 2 * 0x0101 + 0x1011));
@@ -119,13 +119,13 @@
 
 	t >>= 1;
 	t &= 7;
-	
+
 	int i;
 	for (i = 0; i < 8; ++i)
 		rth[i] = ((i == t) ? 0x0203 : (i * 2 * 0x0101 + 0x1011));
 }
 
-00111110110,ri7,cwd
+00111110110,ri7,cwd,signed
 {
 	int t;
 
@@ -184,7 +184,7 @@
 	u32 s;
 
 	s = (i16 << 16) | i16;
-	
+
 	rtw[0] = s;
 	rtw[1] = s;
 	rtw[2] = s;
@@ -196,7 +196,7 @@
 	u32 s;
 
 	s = (i16 << 16);
-	
+
 	rtw[0] = s;
 	rtw[1] = s;
 	rtw[2] = s;
@@ -213,7 +213,7 @@
 
 0100001,ri18,ila
 {
-	
+
 	rtw[0] = i18;
 	rtw[1] = i18;
 	rtw[2] = i18;
@@ -223,10 +223,10 @@
 011000001,ri16,iohl
 {
 
-	rtw[0] |= i16; 
-	rtw[1] |= i16; 
-	rtw[2] |= i16; 
-	rtw[3] |= i16; 
+	rtw[0] |= i16;
+	rtw[1] |= i16;
+	rtw[2] |= i16;
+	rtw[3] |= i16;
 }
 
 001100101,ri16,fsmbi,byte
@@ -383,13 +383,13 @@
 00100101011,rr,bihnz,half
 {
 	if (rthp != 0)
-		ctx->pc = (raw[0] << 2) - 4;
+		ctx->pc = (raw[0] & ~3) - 4;
 }
 
 00100101010,rr,bihz,half
 {
 	if (rthp == 0)
-		ctx->pc = (raw[0] << 2) - 4;
+		ctx->pc = (raw[0] & ~3) - 4;
 }
 
 001000110,ri16,brhnz,half,signed
@@ -470,7 +470,13 @@
 		rth[i] = rbh[i] - rah[i];
 }
 
-00001101,ri10,sfhi
+00001101,ri10,sfhi,half,signed
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = i10 - rah[i];
+}
+
 00001000000,rr,sf
 {
 	int i;
@@ -478,12 +484,11 @@
 		rtw[i] = rbw[i] - raw[i];
 }
 
-00001100,ri10,sfi
+00001100,ri10,sfi,signed
 {
-	int imm = se10(i10);
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = imm - raw[i];
+		rtw[i] = i10 - raw[i];
 }
 
 01101000000,rr,addx
@@ -497,7 +502,10 @@
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = ((raw[i] + rbw[i]) < raw[i]) ? 1 : 0;
+	{
+		u64 r = (u64)raw[i] + rbw[i];
+		rtw[i] = r > 0xFFFFFFFF;
+	}
 }
 
 01101000010,rr,cgx
@@ -505,8 +513,8 @@
 	int i;
 	for (i = 0; i < 4; ++i)
 	{
-		u64 r = raw[i] + (rtw[i]&1) + rbw[i];
-		rtw[i] = (r >> 32) & 1;
+		u64 r = (u64)raw[i] + (rtw[i]&1) + rbw[i];
+		rtw[i] = r > 0xFFFFFFFF;
 	}
 }
 
@@ -514,38 +522,46 @@
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = rbw[i] - raw[i] - ((rtw[i]&1)?0:1);
+		rtw[i] = rbw[i] - raw[i] - ((~rtw[i])&1);
 }
 
 00001000010,rr,bg
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i]=raw[i]>rbw[i]?0:1;
+		rtw[i] = rbw[i] >= raw[i] ? 1 : 0;
 }
 01101000011,rr,bgx
 {
 	int i;
 	for (i = 0; i < 4; ++i)
 	{
-		s64 res = ((u64)raw[i]) - ((u64)rbw[i]) - (u64)(rtw[i]&1);
-		rtw[i] = -(res < 0);
+		if (rtw[i]&1)
+			rtw[i] = rbw[i] >= raw[i] ? 1 : 0;
+		else
+			rtw[i] = rbw[i] > raw[i] ? 1 : 0;
 	}
 }
 
 01111000100,rr,mpy
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+		rtw[i] = (s16)(raw[i] & 0xFFFF) * (s16)(rbw[i] & 0xFFFF);
+}
+
 01111001100,rr,mpyu
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (raw[i] & 0xFFFF) * (rbw[i] & 0xFFFF);
+		rtw[i] = (u16)(raw[i] & 0xFFFF) * (u16)(rbw[i] & 0xFFFF);
 }
 
 01110100,ri10,mpyi,signed
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (raw[i] & 0xFFFF) * i10;
+		rtw[i] = (s16)(raw[i] & 0xFFFF) * (s16)(i10);
 }
 
 01110101,ri10,mpyui,signed
@@ -553,39 +569,56 @@
 	i10 &= 0xFFFF;
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (raw[i] & 0xFFFF) * i10;
+		rtw[i] = (u16)(raw[i] & 0xFFFF) * (u16)(i10);
 }
 
 1100,rrr,mpya
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+		rtw[i] = ((s16)(raw[i] & 0xFFFF) * (s16)(rbw[i] & 0xFFFF)) + rcw[i];
+}
+
 01111000101,rr,mpyh
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = ((raw[i] >> 16) * (rbw[i] & 0xFFFF)) << 16;
+		rtw[i] = ((s16)(raw[i] >> 16) * (s16)(rbw[i] & 0xFFFF)) << 16;
 }
 
 01111000111,rr,mpys
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = se16(((raw[i]&0xFFFF) * (rbw[i]&0xFFFF)) >> 16);
+		rtw[i] = se16(((s16)(raw[i] & 0xFFFF) * (s16)(rbw[i] & 0xFFFF)) >> 16);
 }
 
 01111000110,rr,mpyhh
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (raw[i] >> 16) * (rbw[i] >> 16);
+		rtw[i] = (s16)(raw[i] >> 16) * (s16)(rbw[i] >> 16);
 }
 01101000110,rr,mpyhha
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+		rtw[i] += (s16)(raw[i] >> 16) * (s16)(rbw[i] >> 16);
+}
+
 01111001110,rr,mpyhhu
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (raw[i] >> 16) * (rbw[i] >> 16);
+		rtw[i] = (u16)(raw[i] >> 16) * (u16)(rbw[i] >> 16);
 }
 
 01101001110,rr,mpyhhau
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+		rtw[i] += (u16)(raw[i] >> 16) * (u16)(rbw[i] >> 16);
+}
 
 01010100101,rr,clz
 {
@@ -600,14 +633,33 @@
 	}
 }
 
-01010110100,rr,cntb
-00110110110,rr,fsmb
-00110110101,rr,fsmh
+01010110100,rr,cntb,byte
+{
+	int i;
+	for (i = 0; i < 16; ++i)
+		rtb[i] = __builtin_popcount(rab[i]);
+}
+
+00110110110,rr,fsmb,byte
+{
+	int i;
+	u16 r = (rab[14] << 8) | rab[15];
+	for (i = 0; i < 16; ++i)
+		rtb[i] = (r & (0x8000>>i)) ? ~0 : 0;
+}
+
+00110110101,rr,fsmh,half
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = (rah[7] & (0x80>>i)) ? ~0 : 0;
+}
+
 00110110100,rr,fsm
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (rawp & (8>>i)) ? ~0 : 0;
+		rtw[i] = (raw[3] & (8>>i)) ? ~0 : 0;
 }
 
 00110110010,rr,gbb,byte
@@ -619,16 +671,52 @@
 		rtb[2 + (i / 8)] |= (rab[i]&1) << ((~i)&7);
 }
 
-00110110001,rr,gbh
+00110110001,rr,gbh,half
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = 0;
+	for (i = 0; i < 8; ++i)
+		rth[1] |= (rah[i]&1) << ((~i)&7);
+}
+
 00110110000,rr,gb
 {
 	rtw[0] = ((raw[0] & 1) << 3) | ((raw[1] & 1) << 2) | ((raw[2] & 1) << 1) | (raw[3] & 1) ;
 	rtw[1] = rtw[2] = rtw[3] = 0;
 }
 
-00011010011,rr,avgb
-00001010011,rr,absdb
-01001010011,rr,sumb
+00011010011,rr,avgb,byte
+{
+	int i;
+	for (i = 0; i < 16; i += 1)
+	{
+		rtb[i] = (u16)(rbb[i] + rab[i] + 1) >> 1;
+	}
+}
+
+00001010011,rr,absdb,byte
+{
+	int i;
+	for (i = 0; i < 16; i += 1)
+	{
+		rtb[i] = rbb[i] > rab[i] ? rbb[i] - rab[i] : rab[i] - rbb[i];
+	}
+}
+
+01001010011,rr,sumb,byte
+{
+	int i;
+	for (i = 0; i < 16; i += 4)
+	{
+		u16 res_b = rbb[i + 0] + rbb[i + 1] + rbb[i + 2] + rbb[i + 3];
+		u16 res_a = rab[i + 0] + rab[i + 1] + rab[i + 2] + rab[i + 3];
+		rtb[i] = (u8)(res_b >> 8);
+		rtb[i + 1] = (u8)(res_b);
+		rtb[i + 2] = (u8)(res_a >> 8);
+		rtb[i + 3] = (u8)(res_a);
+	}
+}
 
 01010110110,rr,xsbh,byte
 {
@@ -683,7 +771,7 @@
 {
 	int i;
 	for (i = 0; i < 8; ++i)
-		rth[i] &= i10;
+		rth[i] = rah[i] & i10;
 }
 
 00010100,ri10,andi,signed
@@ -704,20 +792,37 @@
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = raw[i] |~ rbw[i];
+		rtw[i] = raw[i] | ~rbw[i];
 }
 
-00000110,ri10,orbi
-00000101,ri10,orhi
-00000100,ri10,ori
+00000110,ri10,orbi,byte
 {
-	int imm = se10(i10);
+	int i;
+	for (i = 0; i < 16; ++i)
+		rtb[i] = rab[i] | (i10 & 0xFF);
+}
+
+00000101,ri10,orhi,half,signed
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = rah[i] | i10;
+}
+
+00000100,ri10,ori,signed
+{
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = raw[i] | imm;
+		rtw[i] = raw[i] | i10;
 }
 
 00111110000,rr,orx
+{
+	rtwp = raw[0] | raw[1] | raw[2] | raw[3];
+	rtw[1] = 0;
+	rtw[2] = 0;
+	rtw[3] = 0;
+}
 
 01001000001,rr,xor
 {
@@ -733,15 +838,27 @@
 		rtb[i] = rab[i] ^ (i10&0xFF);
 }
 
-01000101,ri10,xorhi
+01000101,ri10,xorhi,half,signed
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = rah[i] ^ i10;
+}
+
 01000100,ri10,xori,signed
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = raw[i] ^ i10;		
+		rtw[i] = raw[i] ^ i10;
 }
 
 00011001001,rr,nand
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+		rtw[i] = ~(raw[i] & rbw[i]);
+}
+
 00001001001,rr,nor
 {
 	int i;
@@ -750,6 +867,12 @@
 }
 
 01001001001,rr,eqv
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+		rtw[i] = raw[i] ^ ~rbw[i];
+}
+
 1000,rrr,selb
 {
 	int i;
@@ -771,7 +894,7 @@
 		else
 		{
 			int b = rcb[i] & 0x1F;
-			if (rcb[i] < 16)
+			if (b < 16)
 				rtb[i] = rab[b];
 			else
 				rtb[i] = rbb[b-16];
@@ -781,10 +904,24 @@
 
 
 # shift and rotate instruction
+00001011111,rr,shlh,half
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = (u32)rah[i] << (rbh[i] & 0x1F);
+}
+
+00001111111,ri7,shlhi,half,signed
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = (u32)rah[i] << (i7 & 0x1F);
+}
+
 00111111111,ri7,shlqbyi,byte
 {
 	i7 &= 0x1F;
-	
+
 	int i;
 	for (i = 0; i < 16; ++i)
 		rtb[i] = (i + i7) >= 16 ? 0 : rab[i + i7];
@@ -793,7 +930,7 @@
 00111111100,ri7,rotqbyi,byte
 {
 	i7 &= 0x1F;
-	
+
 	int i;
 	for (i = 0; i < 16; ++i)
 		rtb[i] = rab[(i + i7) & 15];
@@ -815,7 +952,7 @@
 00111001101,rr,rotqmbybi,byte
 {
 	int i;
-	int shift_count = (0-((rbb[3])>>3)) & 0x1f;
+	int shift_count = (0-(rbbp>>3)) & 0x1f;
 
 	for (i = 0; i < 16; ++i)
 	{
@@ -828,7 +965,7 @@
 00111001111,rr,shlqbybi,byte
 {
 	int i;
-	int shift_count = ((rbb[3])>>3) & 0x1f;
+	int shift_count = (rbbp>>3) & 0x1f;
 
 	for (i = 0; i < 16; ++i)
 	{
@@ -836,6 +973,84 @@
 			rtb[i] = rab[i + shift_count];
 		else
 			rtb[i] = 0;
+	}
+}
+
+00001011100,rr,roth,half
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+	{
+		rth[i] = (rah[i] << (rbh[i] & 15)) | (rah[i] >> (((0 - rbh[i]) & 15)));
+	}
+}
+
+00001011000,rr,rot
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+	{
+		rtw[i] = (raw[i] << (rbw[i] & 31)) | (raw[i] >> (((0 - rbw[i]) & 31)));
+	}
+}
+
+00111011000,rr,rotqbi,Bits
+{
+	int shift_count = (rbB[29] << 2) | (rbB[30] << 1) | rbB[31];
+
+	int i;
+	for (i = 0; i < 128; ++i)
+	{
+		rtB[i] = raB[(i + shift_count) & 127];
+	}
+}
+
+00111001100,rr,rotqbybi,byte
+{
+	int shift_count = (rtb[3] >> 3) & 0x1F;
+
+	int i;
+	for (i = 0; i < 16; ++i)
+		rtb[i] = rab[(i + shift_count) & 15];
+}
+
+00001111100,ri7,rothi,half,signed
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+	{
+		rth[i] = (rah[i] << (i7 & 15)) | (rah[i] >> (((0 - i7) & 15)));
+	}
+}
+
+00001011101,rr,rothm,half
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+	{
+		int shift_count = (-rbh[i]) & 31;
+		if (shift_count < 16)
+			rth[i] = rah[i] >> shift_count;
+		else
+			rth[i] = 0;
+	}
+}
+
+00001011110,rr,rotmah,half
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+	{
+		rth[i] = (s16)((s16)rah[i] >> ((0 - rbh[i]) & 0x1f));
+	}
+}
+
+00001111110,ri7,rotmahi,half,signed
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+	{
+		rth[i] = (s16)((s16)rah[i] >> ((0 - i7) & 0x1f));
 	}
 }
 
@@ -908,8 +1123,8 @@
 
 00111011100,rr,rotqby,byte
 {
-	int shift = rbw[0] & 0xF;
-	
+	int shift = rbbp & 0xF;
+
 	int i;
 	for (i = 0; i < 16; ++i)
 		rtb[i] = rab[(i + shift) & 15];
@@ -917,8 +1132,8 @@
 
 00111011111,rr,shlqby,byte
 {
-	int shift = rbw[0] & 0x1F;
-	
+	int shift = rbbp & 0x1F;
+
 	int i;
 	for (i = 0; i < 16; ++i)
 		rtb[i] = (i + shift) < 16 ? rab[i + shift] : 0;
@@ -926,7 +1141,7 @@
 
 00111011101,rr,rotqmby,byte
 {
-	u32 s = (-rbw[0]) & 0x1F;
+	u32 s = (-rbbp) & 0x1F;
 
 	u32 i;
 	for (i = 0; i < 16; ++i)
@@ -936,7 +1151,7 @@
 			rtb[i] = 0;
 }
 
-00001111001,ri7,rotmi
+00001111001,ri7,rotmi,signed
 {
 	int shift_count = (-i7) & 63;
 	int i;
@@ -947,7 +1162,7 @@
 			rtw[i] = 0;
 }
 
-00001111101,ri7,rothmi,half
+00001111101,ri7,rothmi,half,signed
 {
 	int shift_count = (-i7) & 31;
 	int i;
@@ -971,7 +1186,7 @@
 	}
 }
 
-00001111010,ri7,rotmai
+00001111010,ri7,rotmai,signed
 {
 	int shift_count = (-i7) & 63;
 	int i;
@@ -994,7 +1209,7 @@
 	}
 }
 
-00001111011,ri7,shli
+00001111011,ri7,shli,signed
 {
 	int i;
 	int shift_count = i7 & 0x3f;
@@ -1063,7 +1278,7 @@
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = -(raw[i] > rbw[i]);
+		rtw[i] = -((u32)raw[i] > (u32)rbw[i]);
 }
 
 01001000000,rr,cgt
@@ -1091,7 +1306,7 @@
 {
 	int i;
 	for (i = 0; i < 16; ++i)
-		rtb[i] = -(rab[i] > rbb[i]);
+		rtb[i] = -((u8)rab[i] > (u8)rbb[i]);
 }
 
 01001101,ri10,cgthi,signed,half
@@ -1101,31 +1316,52 @@
 		rth[i] = -(((s16)rah[i]) > ((s16)i10));
 }
 
+01001010000,rr,cgtb,byte
+{
+	int i;
+	for (i = 0; i < 16; ++i)
+		rtb[i] = (s8)rab[i] > (s8)rbb[i] ? -1 : 0;
+}
+
+01001001000,rr,cgth,half
+{
+	int i;
+	for (i = 0; i < 8; ++i)
+		rth[i] = (s16)rah[i] > (s16)rbh[i] ? -1 : 0;
+}
+
+01001110,ri10,cgtbi,byte
+{
+	int i;
+	for (i = 0; i < 16; ++i)
+		rtb[i] = (s8)rab[i] > (s8)i10 ? -1 : 0;
+}
+
 01011100,ri10,clgti,signed
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = -(raw[i] > i10);
+		rtw[i] = -((u32)raw[i] > (u32)i10);
 }
 
 01011101,ri10,clgthi,signed,half
 {
 	int i;
 	for (i = 0; i < 8; ++i)
-		rth[i] = -(rah[i] > i10);
+		rth[i] = -((u16)rah[i] > (u16)i10);
 }
 01011001000,rr,clgth,half
 {
 	int i;
 	for (i = 0; i < 8; ++i)
-		rth[i] = -(rah[i] > rbh[i]);
+		rth[i] = -((u16)rah[i] > (u16)rbh[i]);
 }
 
 01011110,ri10,clgtbi,signed,byte
 {
 	int i;
 	for (i = 0; i < 16; ++i)
-		rtb[i] = -(rab[i] > (i10&0xFF));
+		rtb[i] = -((u8)rab[i] > (u8)(i10&0xFF));
 }
 
 01001100,ri10,cgti,signed
@@ -1178,17 +1414,29 @@
 	int i;
 	for (i = 0; i < 4; ++i)
 		rtf[i] = raf[i]>rbf[i]?ftrue:0.0;
-	
+
 }
+
+01011001010,rr,fcmgt
+{
+	#//TODO:
+}
+
 01111000010,rr,fceq,float
 {
 	//note: floats are not accurately modeled!
-	int i; 
+	int i;
 	int itrue = 0xffffffff;
 	float ftrue = *(float*)&itrue;
 	for (i = 0; i < 4; ++i)
 		rtf[i] = raf[i]==rbf[i]?ftrue:0.0;
 }
+
+01111001010,rr,fcmeq
+{
+	#//TODO:
+}
+
 00110111000,rr,frest,float
 {
 	int i;
@@ -1229,7 +1477,7 @@
 	ptmp[0] = 0.0;
 	rtd[0]=dtmp;
 
-	dtmp = rad[1]; 
+	dtmp = rad[1];
 	ftmp = dtmp;
 	ptmp[0] = ftmp;
 	ptmp[1] = 0.0;
@@ -1249,13 +1497,13 @@
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (int)raf[i];	
+		rtw[i] = (int)raf[i];
 }
 0111011001,ri8,cfltu,float
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		rtw[i] = (u32)raf[i];	
+		rtw[i] = (u32)raf[i];
 }
 01011001110,rr,dfm,double
 {
@@ -1271,7 +1519,7 @@
 {
 	rtd[0] = rad[0]+rbd[0];
 	rtd[1] = rad[1]+rbd[1];
-}	
+}
 01101011101,rr,dfms,double
 {
 	rtd[0] = (rad[0]*rbd[0])-rtd[0];

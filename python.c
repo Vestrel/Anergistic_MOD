@@ -25,14 +25,18 @@ static PyObject *anergistic_execute(PyObject *self, PyObject *args)
 	int pc;
 	PyObject *breakpoints = NULL;
 	PyObject *breakpoints_insns = NULL;
+	int single_step = 0;
+	int break_on_jmp = 0;
 
 	(void)self;
-	if (!PyArg_ParseTuple(args, "y*y*i|OO",
+	if (!PyArg_ParseTuple(args, "y*y*i|OOpp",
 						  &local_store,
 						  &registers,
 						  &pc,
 						  &breakpoints,
-						  &breakpoints_insns))
+						  &breakpoints_insns,
+						  &single_step,
+						  &break_on_jmp))
 		return NULL;
 
 	// XXX: why is (int) required?
@@ -69,8 +73,25 @@ static PyObject *anergistic_execute(PyObject *self, PyObject *args)
 
 	ctx->pc &= LSLR;
 
-	while (emulate() == 0)
+	while (1)
 	{
+		const s32 status = emulate();
+
+		if (status != 0)
+		{
+			if (status == -1)
+			{
+				if (break_on_jmp)
+				{
+					break;
+				}
+			}
+			else
+			{
+				break;
+			}
+		}
+
 		if (breakpoints)
 		{
 			PyObject *pc = PyLong_FromLong(ctx->pc);
@@ -94,6 +115,11 @@ static PyObject *anergistic_execute(PyObject *self, PyObject *args)
 		if (PyErr_CheckSignals() || PyErr_Occurred())
 		{
 			goto ERROR;
+		}
+
+		if (single_step)
+		{
+			break;
 		}
 	}
 

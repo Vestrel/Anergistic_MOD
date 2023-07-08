@@ -119,8 +119,8 @@ u32 emulate(void)
 	int res;
 
 	instr = be32(ctx->ls + ctx->pc);
-#ifdef DEBUG_INSTR
 	const u32 opc = ctx->pc;
+#ifdef DEBUG_INSTR
 	dbgprintf("%05x: %08x ", ctx->pc, instr);
 #endif
 
@@ -173,10 +173,16 @@ u32 emulate(void)
 	printf("\n");
 #endif
 
-#ifdef DEBUG_INSTR
+	int jmp_occurred = 0;
+
+
 	if (ctx->pc != opc)
+	{
+		jmp_occurred = 1;
+#ifdef DEBUG_INSTR
 		dbgprintf("...\n");
 #endif
+	}
 
 	ctx->pc += 4;
 	ctx->pc &= LSLR;
@@ -185,5 +191,10 @@ u32 emulate(void)
 		fail("pc is not aligned: %08x", ctx->pc);
 
 	//	dbgprintf("\n\n", count);
+
+	if (jmp_occurred) {
+		return -1;
+	}
+
 	return 0;
 }

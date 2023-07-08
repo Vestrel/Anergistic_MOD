@@ -8,11 +8,11 @@ UNAME=$(shell uname -s)
 WINDOWSID=MINGW32_NT-6.1
 
 ifeq ($(UNAME), $(WINDOWSID))
-INCLUDE_PYTHON=C:\Python39\include
+INCLUDE_PYTHON=C:\Python310\include
 EXEC_GENERATE=python instr-generate.py
 LIBS=-lws2_32
 else
-INCLUDE_PYTHON=/usr/include/python3.9/
+INCLUDE_PYTHON=/usr/include/python3.10/
 EXEC_GENERATE=./instr-generate.py
 LIBS=-lm
 endif
@@ -24,7 +24,7 @@ CFLAGS=-W -Wall -Wextra -fPIC -fno-strict-aliasing -O2 -I $(INCLUDE_PYTHON)
 LDFLAGS=
 
 ifeq ($(UNAME), $(WINDOWSID))
-LIBRARY_PATH = C:\Python26\libs\
+LIBRARY_PATH = C:\Python310\libs\
 all: $(TARGET_STANDALONE) $(TARGET_PYTHON)
 else
 all: $(TARGET_STANDALONE) $(TARGET_PYTHON)
@@ -34,7 +34,7 @@ $(TARGET_STANDALONE): $(OBJS_STANDALONE) $(DEPS)
 	$(CC) -o $@ $(OBJS_STANDALONE) $(LIBS)
 
 $(TARGET_PYTHON): $(OBJS_PYTHON) $(DEPS)
-	$(CC) -o $@ $(OBJS_PYTHON) $(LIBS) -lpython3.9 -shared
+	$(CC) -o $@ $(OBJS_PYTHON) $(LIBS) -lpython3.10 -shared
 
 %.o: %.c $(DEPS)
 	$(CC) -c $(CFLAGS) -o $@ $<

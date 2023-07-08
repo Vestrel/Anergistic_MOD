@@ -90,10 +90,10 @@ class MFC:
 
 	def handle_command(self, command):
 		if command == self.MFC_GET_CMD:
-#			print("DMA GET Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID))
+			print("DMA GET Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID))
 			self.set_ls(self.MFC_LSA, self.dma_get((self.MFC_EAH << 32) | self.MFC_EAL, self.MFC_Size))
 		elif command == self.MFC_PUT_CMD:
-#			print("DMA PUT Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID))
+			print("DMA PUT Local=%08x, EA = %08x:%08x, Size=%08x, TagID=%08x" % (self.MFC_LSA, self.MFC_EAH, self.MFC_EAL, self.MFC_Size, self.MFC_TagID))
 			self.dma_set((self.MFC_EAH << 32) | self.MFC_EAL, self.ls[self.MFC_LSA:self.MFC_LSA + self.MFC_Size])
 		else:
 			raise self.UnknownCommand("pc=%08x command=%02x" % (self.pc, command))
@@ -142,6 +142,12 @@ class Calltree:
 				print("-> %s(%s)" % (self.symbols.get(target).decode(), ','.join(["0x%08x" % r for r in res])))
 		self.tree = []
 
+	def calltree_get_current(self):
+		try:
+			return "-> %s" % (self.symbols.get(self.symbols_len[self.pc]).decode())
+		except:
+			return "-> unknown"
+
 class SPU(MFC, Calltree):
 	class UnknownStop(Exception):
 		pass
@@ -169,8 +175,8 @@ class SPU(MFC, Calltree):
 		except OSError:
 			print("Unable to demangle ELF symbols.")
 
-	def run(self):
-		while True:
+	def run(self, insn_cnt = -1):
+		while insn_cnt > 0 or insn_cnt == -1:
 			opcode = struct.unpack(">I", self.ls[self.pc:self.pc+4])[0]
 			rt = opcode & 0x7F
 			ch = (opcode >> 7) & 0x7F
@@ -180,6 +186,8 @@ class SPU(MFC, Calltree):
 
 			if self.pc in self.hooks:
 				if self.hooks[self.pc]():
+					if insn_cnt > 0:
+						insn_cnt -= 1
 					continue
 
 			if   opcode & 0xFFE00000 == 0x21a00000:
@@ -192,17 +200,18 @@ class SPU(MFC, Calltree):
 				self.set_regW(rt, self.rchcnt(ch))
 				self.pc += 4
 			elif opcode & 0xFFE00000 == 0:
-				if self.stop(opcode & 0x3FFF):
-					break
+				self.stop(opcode & 0x3FFF)
+				return
 			else:
-				oldpc = self.pc
-				self.pc = anergistic.execute(self.ls, self.registers, self.pc, self.breakpoints, self.breakpoints_insns)
+				self.pc = anergistic.execute(self.ls, self.registers, self.pc, self.breakpoints, self.breakpoints_insns, insn_cnt != -1, True)
+				print(self.calltree_get_current())
 				if opcode >> 21 in self.breakpoints_insns:
 					return
 				if self.pc in self.breakpoints:
 					return
-				if self.pc == oldpc:
-					raise self.UnknownStop("stopped at pc=%08x (opcode %08x)" % (self.pc, opcode))
+
+			if insn_cnt > 0:
+				insn_cnt -= 1
 
 	def load(self, filename, no_calltree = True):
 		"""Load an elf into the local store (and set PC to entry point)"""
@@ -226,6 +235,7 @@ class SPU(MFC, Calltree):
 			print("elf: phdr #%u: %08x bytes; %08x -> %08x" % (i, p_filesz, p_offset, p_paddr))
 
 		symbols = {}
+		symbols_len = {}
 
 		strtab = None
 
@@ -242,6 +252,8 @@ class SPU(MFC, Calltree):
 					st_name, st_value, st_size, st_info, st_other, st_shndx = \
 						struct.unpack(">IIIBBH", elf.read(sh_entsize))
 					symbols[st_value] = st_name
+					for addr_idx in range(st_value, st_value + st_size):
+						symbols_len[addr_idx] = st_value
 				strtab = sh_link
 			elif i == strtab: # yes, they need to be in order.
 				print("symbol string tab at %08x size %08x" % (sh_offset, sh_size))
@@ -259,6 +271,7 @@ class SPU(MFC, Calltree):
 					symbols[st_value] = str
 
 		self.symbols = symbols
+		self.symbols_len = symbols_len
 		self.symbols_mangled = {}
 		for s in self.symbols:
 			self.symbols_mangled[self.symbols[s]] = s
@@ -296,7 +309,7 @@ class SPU(MFC, Calltree):
 		return self.ls[offset:offset + len]
 
 	def stop(self, code):
-		raise self.UnknownStop("Stopped with code %08x" % code)
+		print("Stopped with code %08x" % code)
 
 	def hook(self, addr, fnc):
 		addr = self.symbols_mangled[addr]
